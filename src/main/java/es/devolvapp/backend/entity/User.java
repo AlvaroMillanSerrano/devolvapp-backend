@@ -1,10 +1,7 @@
 package es.devolvapp.backend.entity;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +17,7 @@ public class User {
 
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private long id;
 
     @NotBlank
@@ -33,7 +31,10 @@ public class User {
 
     @NotBlank(message = "DNI obligatorio")
     @Size(max=18)
-    @Pattern(regexp="\\d{8}[A-Za-z]]",message="DNI inválido")
+    @Pattern(
+            regexp = "(?i)(\\d{8}[A-Z]|[XYZ]\\d{7}[A-Z])",
+            message = "El formato del DNI/NIE no es válido"
+    )
     @Column(unique = true, name = "id_card")
     private String idCard;
 
@@ -53,12 +54,12 @@ public class User {
     private String password;
 
 
-    @NotBlank
+    @NotNull
     @Column(name = "u_role")
     @Enumerated(EnumType.STRING)
     private Role rol;
 
-    @NotBlank
+    @DecimalMin("0.0")
     private float wallet;
 
     @NotBlank
@@ -82,11 +83,11 @@ public class User {
     @Column(name="zip_code")
     private String zipCode;
 
-    @NotBlank
+
     @Column(name="created_At")
     private LocalDateTime createdAt;
 
-    @NotBlank
+    @NotNull
     @Column(name="isactive")
     private boolean isActive;
 
