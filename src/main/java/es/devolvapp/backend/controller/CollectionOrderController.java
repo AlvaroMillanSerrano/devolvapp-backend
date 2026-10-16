@@ -1,7 +1,7 @@
 package es.devolvapp.backend.controller;
 
 import es.devolvapp.backend.dto.CollectionOrderResponse;
-import es.devolvapp.backend.dto.CreateCollectionOrderRequest;
+import es.devolvapp.backend.dto.CreateCollectionRequest;
 import es.devolvapp.backend.service.CollectionOrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -13,14 +13,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/pedidos")
+@RequestMapping("/api/ciudadano/pedidos")
 @RequiredArgsConstructor
 public class CollectionOrderController {
 
     private final CollectionOrderService collectionOrderService;
 
     @PostMapping
-    public ResponseEntity<CollectionOrderResponse> create(@Valid @RequestBody CreateCollectionOrderRequest request) {
+    public ResponseEntity<CollectionOrderResponse> create(@Valid @RequestBody CreateCollectionRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(collectionOrderService.create(request));
     }
 }
