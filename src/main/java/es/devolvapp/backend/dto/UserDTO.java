@@ -4,7 +4,7 @@ import lombok.Data;
 
 @Data
 public class UserDTO {
-    private long id;
+
     private String name;
     private String surname;
     private String idCard;
@@ -13,4 +13,8 @@ public class UserDTO {
     private String rol;
     private float wallet;
     private String city;
+    private String street;
+    private String floor;
+    private String letter;
+    private String zipCode;
 }
