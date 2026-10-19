@@ -11,6 +11,7 @@ import es.devolvapp.backend.entity.ContainerCatalog;
 import es.devolvapp.backend.entity.ContainerType;
 import es.devolvapp.backend.entity.Role;
 import es.devolvapp.backend.entity.User;
+import es.devolvapp.backend.exception.ApiException;
 import es.devolvapp.backend.repository.CollectionOrderRepository;
 import es.devolvapp.backend.repository.ContainerCatalogRepository;
 import es.devolvapp.backend.repository.UserRepository;
@@ -26,7 +27,6 @@ import java.time.OffsetDateTime;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -36,45 +36,53 @@ public class CollectionOrderService {
     private final ContainerCatalogRepository containerCatalogRepository;
     private final UserRepository userRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final CodeGenerator codeGenerator;
 
     @Transactional
-    public CollectionOrderResponse create(CreateCollectionRequest request) {
-        User citizen = userRepository.findById(request.citizenId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ciudadano no encontrado"));
+    public CollectionOrderResponse create(CreateCollectionRequest request, Long citizenId) {
+        User citizen = userRepository.findById(citizenId)
+                .orElseThrow(() -> ApiException.notFound("Ciudadano no encontrado"));
         if (!"ACTIVA".equals(citizen.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "El usuario no está activo");
+            throw ApiException.forbidden("El usuario no está activo");
         }
         if (!citizen.getRoles().contains(Role.CIUDADANO)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "El usuario no tiene el rol de ciudadano");
-        }
-
-        TimeSlotData slot = findAndLockTimeSlot(request.franjaId());
-        if (!slot.active()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "La franja horaria no está activa");
-        }
-        if (request.fecha().getDayOfWeek().getValue() != slot.dayOfWeek()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "La fecha no corresponde al día de la semana de la franja seleccionada");
+            throw ApiException.forbidden("El usuario no tiene el rol de ciudadano");
         }
 
         AddressData address = findAddress(citizen.getId());
-        if (address.zoneId() == null || !address.zoneId().equals(slot.zoneId())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "La franja seleccionada no corresponde a la zona del domicilio");
+        boolean hasScheduleData = request.fecha() != null || request.franjaId() != null;
+        if (hasScheduleData && (request.fecha() == null || request.franjaId() == null)) {
+            throw ApiException.fieldError("VALIDATION_ERROR", "La fecha y la franja deben enviarse juntas",
+                    "fecha", "Indica fecha y franja, o deja ambos campos vacíos para programar más adelante");
         }
-        validateSlotCapacity(request, slot);
+        TimeSlotData slot = null;
+        if (hasScheduleData) {
+            slot = findAndLockTimeSlot(request.franjaId());
+            if (!slot.active()) {
+                throw ApiException.conflict("FRANJA_COMPLETA", "La franja horaria no está activa");
+            }
+            if (request.fecha().getDayOfWeek().getValue() != slot.dayOfWeek()) {
+                throw ApiException.fieldError("VALIDATION_ERROR", "La fecha no corresponde a la franja seleccionada",
+                        "fecha", "La fecha no corresponde al día de la semana de la franja seleccionada");
+            }
+            if (address.zoneId() == null || !address.zoneId().equals(slot.zoneId())) {
+                throw ApiException.unprocessable("ZONA_SIN_SERVICIO",
+                        "La franja seleccionada no corresponde a la zona del domicilio");
+            }
+            validateSlotCapacity(request, slot);
+        }
         validateBagCount(request.bolsas().size());
 
         var collection = new CollectionOrder();
-        collection.setCode("P-" + UUID.randomUUID().toString().replace("-", "")
-                .substring(0, 10).toUpperCase());
+        collection.setCode(codeGenerator.next("seq_collection_code", "P-", 10, 4));
         collection.setCitizen(citizen);
-        collection.setZoneId(slot.zoneId());
-        collection.setCollectorId(findCollector(slot.zoneId(), slot.dayOfWeek()));
-        collection.setTimeSlotId(slot.id());
-        collection.setCollectionDate(request.fecha());
-        collection.setStartTime(slot.startTime());
-        collection.setEndTime(slot.endTime());
+        // Sin fecha/franja el pedido queda pendiente de programación (MVP).
+        collection.setZoneId(slot == null ? null : slot.zoneId());
+        collection.setCollectorId(slot == null ? null : findCollector(slot.zoneId(), slot.dayOfWeek()));
+        collection.setTimeSlotId(slot == null ? null : slot.id());
+        collection.setCollectionDate(slot == null ? null : request.fecha());
+        collection.setStartTime(slot == null ? null : slot.startTime());
+        collection.setEndTime(slot == null ? null : slot.endTime());
         collection.setAddressStreetType(address.streetType());
         collection.setAddressStreetName(address.streetName());
         collection.setAddressStreetNumber(address.streetNumber());
@@ -125,20 +133,21 @@ public class CollectionOrderService {
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "Tipo de envase no configurado: " + type));
             if (quantity > catalog.getMaxBagCapacity()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "La cantidad de " + type + " supera la capacidad permitida por bolsa");
+            throw ApiException.fieldError("VALIDATION_ERROR", "Se supera la capacidad de la bolsa",
+                    "bolsas.contenidos." + type, "La capacidad máxima para " + type + " es "
+                            + catalog.getMaxBagCapacity() + " envases");
             }
             totalQuantity += quantity;
             totalCapacity += catalog.getMaxBagCapacity();
         }
 
         if (totalQuantity > Short.MAX_VALUE || totalCapacity > Short.MAX_VALUE) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La bolsa supera la capacidad máxima");
+            throw ApiException.fieldError("VALIDATION_ERROR", "La bolsa supera la capacidad máxima",
+                    "bolsas.contenidos", "La cantidad total supera la capacidad máxima");
         }
 
         var bag = new Bag();
-        bag.setCode("B-" + UUID.randomUUID().toString().replace("-", "")
-                .substring(0, 6).toUpperCase());
+        bag.setCode(codeGenerator.next("seq_bag_code", "B-", 36, 5));
         bag.setQuantity((short) totalQuantity);
         bag.setMaxCapacity((short) totalCapacity);
 
@@ -162,21 +171,13 @@ public class CollectionOrderService {
     private TimeSlotData findAndLockTimeSlot(Long timeSlotId) {
         List<TimeSlotData> matches = jdbcTemplate.query("""
                 SELECT id, zone_id, day_of_week, start_time, end_time, capacity, active
-                FROM time_slot
-                WHERE id = ?
-                FOR UPDATE
+                FROM time_slot WHERE id = ? FOR UPDATE
                 """, (rs, rowNum) -> new TimeSlotData(
-                rs.getLong("id"),
-                rs.getLong("zone_id"),
-                rs.getInt("day_of_week"),
-                rs.getTime("start_time").toLocalTime(),
-                rs.getTime("end_time").toLocalTime(),
-                rs.getInt("capacity"),
-                rs.getBoolean("active")
+                rs.getLong("id"), rs.getLong("zone_id"), rs.getInt("day_of_week"),
+                rs.getTime("start_time").toLocalTime(), rs.getTime("end_time").toLocalTime(),
+                rs.getInt("capacity"), rs.getBoolean("active")
         ), timeSlotId);
-        if (matches.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Franja horaria no encontrada");
-        }
+        if (matches.isEmpty()) throw ApiException.notFound("Franja horaria no encontrada");
         return matches.getFirst();
     }
 
@@ -184,8 +185,7 @@ public class CollectionOrderService {
         List<AddressData> matches = jdbcTemplate.query("""
                 SELECT a.street_type, a.street_name, a.street_number, a.floor, a.letter,
                        RTRIM(a.zip_code) AS zip_code, a.city, a.lat, a.lng, z.zone_id
-                FROM address a
-                JOIN zip_code z ON z.code = a.zip_code
+                FROM address a LEFT JOIN zip_code z ON z.code = a.zip_code
                 WHERE a.user_id = ?
                 """, (rs, rowNum) -> new AddressData(
                 rs.getString("street_type"),
@@ -200,19 +200,18 @@ public class CollectionOrderService {
                 (Long) rs.getObject("zone_id")
         ), citizenId);
         if (matches.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "El ciudadano no tiene un domicilio válido");
+            throw ApiException.unprocessable("DOMICILIO_REQUERIDO", "Completa un domicilio válido antes de crear un pedido");
         }
         return matches.getFirst();
     }
 
     private void validateSlotCapacity(CreateCollectionRequest request, TimeSlotData slot) {
         Long reserved = jdbcTemplate.queryForObject("""
-                SELECT COUNT(*)
-                FROM collection
+                SELECT COUNT(*) FROM collection
                 WHERE time_slot_id = ? AND collection_date = ? AND status <> 'CANCELADA'
                 """, Long.class, slot.id(), request.fecha());
         if (reserved != null && reserved >= slot.capacity()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "La franja horaria ya no tiene capacidad");
+            throw ApiException.conflict("FRANJA_COMPLETA", "La franja horaria ya no tiene capacidad");
         }
     }
 
@@ -221,9 +220,13 @@ public class CollectionOrderService {
                 SELECT param_value FROM app_parameter WHERE param_key = 'max_bolsas_pedido'
                 """, (rs, rowNum) -> rs.getString("param_value"));
         if (!configuredMax.isEmpty() && bagCount > Integer.parseInt(configuredMax.getFirst())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "El máximo de bolsas por recogida es " + configuredMax.getFirst());
+            throw ApiException.fieldError("VALIDATION_ERROR", "Se supera el máximo de bolsas",
+                    "bolsas", "El máximo de bolsas por recogida es " + configuredMax.getFirst());
         }
+    }
+
+    private static Double toDouble(BigDecimal value) {
+        return value == null ? null : value.doubleValue();
     }
 
     private Long findCollector(Long zoneId, int dayOfWeek) {
@@ -233,14 +236,9 @@ public class CollectionOrderService {
         return collectors.isEmpty() ? null : collectors.getFirst();
     }
 
-    private static Double toDouble(BigDecimal value) {
-        return value == null ? null : value.doubleValue();
-    }
-
     private record TimeSlotData(Long id, Long zoneId, int dayOfWeek,
                                 java.time.LocalTime startTime, java.time.LocalTime endTime,
-                                int capacity, boolean active) {
-    }
+                                int capacity, boolean active) {}
 
     private record AddressData(String streetType, String streetName, String streetNumber,
                                String floor, String letter, String zipCode, String city,

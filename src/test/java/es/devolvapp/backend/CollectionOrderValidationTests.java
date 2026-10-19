@@ -18,8 +18,17 @@ class CollectionOrderValidationTests {
     private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
 
     @Test
+    void acceptsOrderWithoutSchedulingDetails() {
+        var request = new CreateCollectionRequest(null, null, List.of(
+                new CreateBagRequest(Map.of(ContainerType.PET, 2, ContainerType.BRIK, 1))
+        ));
+
+        assertThat(validator.validate(request)).isEmpty();
+    }
+
+    @Test
     void acceptsFutureCollectionWithSeveralMixedBags() {
-        var request = new CreateCollectionRequest(1L, 3L, LocalDate.now().plusDays(2), List.of(
+        var request = new CreateCollectionRequest(3L, LocalDate.now().plusDays(2), List.of(
                 new CreateBagRequest(Map.of(ContainerType.PET, 2, ContainerType.BRIK, 1,
                         ContainerType.MEZCLADO, 3)),
                 new CreateBagRequest(Map.of(ContainerType.VIDRIO, 8))
@@ -30,7 +39,7 @@ class CollectionOrderValidationTests {
 
     @Test
     void rejectsNonPositiveQuantitiesAndEmptyBagContents() {
-        var request = new CreateCollectionRequest(1L, 3L, LocalDate.now().plusDays(2), List.of(
+        var request = new CreateCollectionRequest(3L, LocalDate.now().plusDays(2), List.of(
                 new CreateBagRequest(Map.of(ContainerType.PET, 0)),
                 new CreateBagRequest(Map.of(ContainerType.BRIK, -2)),
                 new CreateBagRequest(Map.of())

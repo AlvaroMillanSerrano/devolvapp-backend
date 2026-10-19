@@ -7,6 +7,8 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
@@ -39,7 +41,7 @@ public class CollectionOrder {
     @JoinColumn(name = "citizen_id", nullable = false)
     private User citizen;
 
-    @Column(name = "zone_id", nullable = false)
+    @Column(name = "zone_id")
     private Long zoneId;
 
     @Column(name = "collector_id")
@@ -48,13 +50,13 @@ public class CollectionOrder {
     @Column(name = "time_slot_id")
     private Long timeSlotId;
 
-    @Column(name = "collection_date", nullable = false)
+    @Column(name = "collection_date")
     private LocalDate collectionDate;
 
-    @Column(name = "start_time", nullable = false)
+    @Column(name = "start_time")
     private LocalTime startTime;
 
-    @Column(name = "end_time", nullable = false)
+    @Column(name = "end_time")
     private LocalTime endTime;
 
     @Column(name = "addr_street_type", nullable = false, length = 20)
@@ -72,16 +74,17 @@ public class CollectionOrder {
     @Column(name = "addr_letter", length = 10)
     private String addressLetter;
 
-    @Column(name = "addr_zip_code", nullable = false, length = 5)
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(name = "addr_zip_code", length = 5, columnDefinition = "CHAR(5)")
     private String addressZipCode;
 
     @Column(name = "addr_city", nullable = false, length = 80)
     private String addressCity;
 
-    @Column(name = "addr_lat")
+    @Column(name = "addr_lat", columnDefinition = "NUMERIC(9,6)")
     private Double addressLatitude;
 
-    @Column(name = "addr_lng")
+    @Column(name = "addr_lng", columnDefinition = "NUMERIC(9,6)")
     private Double addressLongitude;
 
     @Column(nullable = false, length = 12)
