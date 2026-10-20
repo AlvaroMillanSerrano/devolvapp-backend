@@ -324,3 +324,4 @@ INSERT INTO app_parameter (param_key, param_value) VALUES
     ('kg_co2_por_km_coche',   '0.12'),
     ('kg_co2_por_arbol_anio', '21')
 ON CONFLICT (param_key) DO NOTHING;
+
