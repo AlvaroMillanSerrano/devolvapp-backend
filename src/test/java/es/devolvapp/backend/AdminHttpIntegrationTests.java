@@ -88,6 +88,65 @@ class AdminHttpIntegrationTests extends PostgresIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT status FROM d_user WHERE id=?", String.class, collectorId)).isEqualTo("SUSPENDIDA");
     }
 
+    @Test
+    void replacesUserRolesAndAppliesThemToExistingTokensImmediately() throws Exception {
+        Actors actors = createActors();
+        String admin = token(actors.adminId(), actors.adminEmail(), Role.ADMIN);
+        String collector = token(actors.collectorId(), actors.collectorEmail(), Role.RECOLECTOR);
+
+        var elevated = send("PUT", "/api/admin/usuarios/" + actors.citizenId() + "/roles", admin,
+                "{\"roles\":[\"CIUDADANO\",\"ADMIN\"]}");
+        assertThat(elevated.statusCode()).isEqualTo(200).withFailMessage(elevated.body());
+        assertThat(elevated.body()).contains("\"roles\":[\"ADMIN\",\"CIUDADANO\"]");
+
+        var replaced = send("PUT", "/api/admin/usuarios/" + actors.citizenId() + "/roles", admin,
+                "{\"roles\":[\"CIUDADANO\",\"RECOLECTOR\"]}");
+        assertThat(replaced.statusCode()).isEqualTo(200).withFailMessage(replaced.body());
+        assertThat(jdbc.query("SELECT role FROM user_role WHERE user_id=? ORDER BY role",
+                (rs,row)->rs.getString(1),actors.citizenId())).containsExactly("CIUDADANO","RECOLECTOR");
+
+        var removedCollectorRole = send("PUT", "/api/admin/usuarios/" + actors.collectorId() + "/roles", admin,
+                "{\"roles\":[\"CIUDADANO\"]}");
+        assertThat(removedCollectorRole.statusCode()).isEqualTo(200).withFailMessage(removedCollectorRole.body());
+        assertThat(send("GET", "/api/recolector/preferencias", collector, null).statusCode()).isEqualTo(403);
+    }
+
+    @Test
+    void validatesRoleChangesAndProtectsAdministratorAccounts() throws Exception {
+        Actors actors = createActors();
+        String admin = token(actors.adminId(), actors.adminEmail(), Role.ADMIN);
+        String citizen = token(actors.citizenId(), actors.citizenEmail(), Role.CIUDADANO);
+
+        var empty = send("PUT", "/api/admin/usuarios/" + actors.citizenId() + "/roles", admin,
+                "{\"roles\":[]}");
+        assertThat(empty.statusCode()).isEqualTo(400);
+        var unknown = send("PUT", "/api/admin/usuarios/" + actors.citizenId() + "/roles", admin,
+                "{\"roles\":[\"DESCONOCIDO\"]}");
+        assertThat(unknown.statusCode()).isEqualTo(400);
+        var duplicate = send("PUT", "/api/admin/usuarios/" + actors.citizenId() + "/roles", admin,
+                "{\"roles\":[\"CIUDADANO\",\"CIUDADANO\"]}");
+        assertThat(duplicate.statusCode()).isEqualTo(400);
+        assertThat(send("PUT", "/api/admin/usuarios/" + actors.citizenId() + "/roles", citizen,
+                "{\"roles\":[\"RECOLECTOR\"]}").statusCode()).isEqualTo(403);
+
+        var lastAdmin = send("PUT", "/api/admin/usuarios/" + actors.adminId() + "/roles", admin,
+                "{\"roles\":[\"CIUDADANO\"]}");
+        assertThat(lastAdmin.statusCode()).isEqualTo(409);
+        assertThat(lastAdmin.body()).contains("ULTIMO_ADMIN");
+
+        Long secondAdminId = createUser("second-admin-" + actors.suffix() + "@test.local", "ADMIN", null);
+        var selfRemoval = send("PUT", "/api/admin/usuarios/" + actors.adminId() + "/roles", admin,
+                "{\"roles\":[\"CIUDADANO\"]}");
+        assertThat(selfRemoval.statusCode()).isEqualTo(409);
+        assertThat(selfRemoval.body()).contains("NO_PERMITIDO");
+
+        var missingUser = send("PUT", "/api/admin/usuarios/999999/roles", admin,
+                "{\"roles\":[\"CIUDADANO\"]}");
+        assertThat(missingUser.statusCode()).isEqualTo(404);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM user_role WHERE user_id=? AND role='ADMIN'",
+                Integer.class,secondAdminId)).isEqualTo(1);
+    }
+
     private static long numberField(String json, String field) {
         var matcher = java.util.regex.Pattern.compile("\\\"" + field + "\\\"\\s*:\\s*(\\d+)").matcher(json);
         if (!matcher.find()) throw new AssertionError("JSON field not found: " + field + " in " + json);

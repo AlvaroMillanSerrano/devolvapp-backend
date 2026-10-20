@@ -54,6 +54,8 @@ public class AdminController {
             @RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size){return service.users(q,rol,page,size);}
     @GetMapping("/usuarios/{id}") public Object usuario(@PathVariable Long id){return service.user(id);}
     @PutMapping("/usuarios/{id}") public Object editarUsuario(@PathVariable Long id,@Valid @RequestBody EditarUsuarioRequest request){return service.editUser(id,request);}
+    @PutMapping("/usuarios/{id}/roles") public Object actualizarRoles(@PathVariable Long id,@AuthenticationPrincipal AuthUser user,
+            @Valid @RequestBody ActualizarRolesRequest request){return service.updateUserRoles(id,user.id(),request);}
     @PostMapping("/usuarios/{id}/suspender") public Object suspender(@PathVariable Long id){return service.setUserStatus(id,false);}
     @PostMapping("/usuarios/{id}/reactivar") public Object reactivar(@PathVariable Long id){return service.setUserStatus(id,true);}
     @PostMapping("/recolectores") @ResponseStatus(HttpStatus.CREATED) public Object crearRecolector(@Valid @RequestBody CrearRecolectorRequest request){return service.createCollector(request);}
