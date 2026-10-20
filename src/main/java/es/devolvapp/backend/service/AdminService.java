@@ -186,7 +186,7 @@ public class AdminService {
                        (SELECT COUNT(*) FROM bag b WHERE b.collection_id=c.id) num_bags,
                        COALESCE((SELECT SUM(quantity) FROM bag b WHERE b.collection_id=c.id),0) total_containers,
                        EXISTS(SELECT 1 FROM incident i WHERE i.collection_id=c.id) has_incidents
-                FROM collection c JOIN zone z ON z.id=c.zone_id
+                FROM collection c LEFT JOIN zone z ON z.id=c.zone_id
                 JOIN d_user u ON u.id=c.citizen_id LEFT JOIN d_user collector ON collector.id=c.collector_id
                 """+where+" ORDER BY c.collection_date DESC,c.start_time LIMIT ? OFFSET ?";
         args.add(s);args.add(p*s);
@@ -199,7 +199,7 @@ public class AdminService {
         Map<String,Object> extra=jdbc.query("""
                 SELECT c.collector_id,collector.first_name,collector.last_name,u.first_name citizen_first,
                        u.last_name citizen_last,u.phone_number citizen_phone,z.id zone_id,z.name zone
-                FROM collection c JOIN d_user u ON u.id=c.citizen_id JOIN zone z ON z.id=c.zone_id
+                FROM collection c JOIN d_user u ON u.id=c.citizen_id LEFT JOIN zone z ON z.id=c.zone_id
                 LEFT JOIN d_user collector ON collector.id=c.collector_id WHERE c.id=?
                 """,rs->{
             if(!rs.next())return Map.of();
@@ -209,7 +209,9 @@ public class AdminService {
                     "nombre",rs.getString("first_name")+" "+rs.getString("last_name")));
             map.put("ciudadano",Map.of("nombre",rs.getString("citizen_first")+" "+rs.getString("citizen_last"),
                     "telefono",rs.getString("citizen_phone")==null?"":rs.getString("citizen_phone")));
-            map.put("zona",Map.of("id",rs.getLong("zone_id"),"nombre",rs.getString("zone")));
+            Object zoneId = rs.getObject("zone_id");
+            map.put("zona", zoneId == null ? null : Map.of("id", ((Number) zoneId).longValue(),
+                    "nombre", rs.getString("zone")));
             return map;
         },id);
         result.putAll(extra);
