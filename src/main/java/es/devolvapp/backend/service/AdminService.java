@@ -17,9 +17,12 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -625,6 +628,46 @@ public class AdminService {
                     city=EXCLUDED.city,lat=EXCLUDED.lat,lng=EXCLUDED.lng""",
                     id,a.tipoVia(),a.nombreVia(),a.numero(),a.piso(),a.letra(),a.ciudad(),a.codigoPostal());
             if(updated==0)throw ApiException.fieldError("VALIDATION_ERROR","Código postal desconocido","direccion.codigoPostal","El código postal no existe");}
+        return user(id);
+    }
+
+    @Transactional public Map<String,Object> updateUserRoles(Long id,Long adminId,ActualizarRolesRequest request) {
+        if(new HashSet<>(request.roles()).size()!=request.roles().size())
+            throw ApiException.fieldError("VALIDATION_ERROR","La lista contiene roles repetidos","roles","Cada rol solo puede aparecer una vez");
+
+        jdbc.query("""
+                SELECT u.id FROM d_user u
+                WHERE u.status='ACTIVA' AND EXISTS(SELECT 1 FROM user_role r WHERE r.user_id=u.id AND r.role='ADMIN')
+                ORDER BY u.id FOR UPDATE OF u
+                """,(rs,row)->rs.getLong(1));
+        Integer adminExists=jdbc.queryForObject("""
+                SELECT COUNT(*) FROM d_user u JOIN user_role r ON r.user_id=u.id
+                WHERE u.id=? AND u.status='ACTIVA' AND r.role='ADMIN'
+                """,Integer.class,adminId);
+        if(adminExists==null||adminExists==0)throw ApiException.forbidden("Ya no tienes permisos de administración");
+
+        List<String> statuses=jdbc.query("SELECT status FROM d_user WHERE id=?",
+                (rs,row)->rs.getString("status"),id);
+        if(statuses.isEmpty())throw ApiException.notFound("Usuario no encontrado");
+        Set<String> currentRoles=new HashSet<>(jdbc.query("SELECT role FROM user_role WHERE user_id=?",
+                (rs,row)->rs.getString("role"),id));
+        boolean removesAdmin=currentRoles.contains(Role.ADMIN.name())
+                && request.roles().stream().noneMatch(role->role==Role.ADMIN);
+        if(removesAdmin&&"ACTIVA".equals(statuses.getFirst())){
+            Integer activeAdmins=jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM d_user u JOIN user_role r ON r.user_id=u.id
+                    WHERE u.status='ACTIVA' AND r.role='ADMIN'
+                    """,Integer.class);
+            if(activeAdmins!=null&&activeAdmins<=1)
+                throw ApiException.conflict("ULTIMO_ADMIN","No se puede quitar el rol al último administrador activo");
+        }
+        if(id.equals(adminId)&&removesAdmin)
+            throw ApiException.conflict("NO_PERMITIDO","No puedes quitarte tu propio rol de administrador");
+
+        jdbc.update("DELETE FROM user_role WHERE user_id=?",id);
+        for(Role role:new LinkedHashSet<>(request.roles()))
+            jdbc.update("INSERT INTO user_role(user_id,role) VALUES (?,?)",id,role.name());
+        jdbc.update("UPDATE d_user SET updated_at=now() WHERE id=?",id);
         return user(id);
     }
 

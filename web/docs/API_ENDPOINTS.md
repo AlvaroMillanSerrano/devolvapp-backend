@@ -174,16 +174,17 @@
 | 63 | GET | `/api/admin/usuarios` |
 | 64 | GET | `/api/admin/usuarios/{id}` |
 | 65 | PUT | `/api/admin/usuarios/{id}` |
-| 66 | POST | `/api/admin/usuarios/{id}/suspender` |
-| 67 | POST | `/api/admin/usuarios/{id}/reactivar` |
-| 68 | POST | `/api/admin/recolectores` |
-| 69 | POST | `/api/admin/usuarios/{id}/password-provisional` |
+| 66 | PUT | `/api/admin/usuarios/{id}/roles` |
+| 67 | POST | `/api/admin/usuarios/{id}/suspender` |
+| 68 | POST | `/api/admin/usuarios/{id}/reactivar` |
+| 69 | POST | `/api/admin/recolectores` |
+| 70 | POST | `/api/admin/usuarios/{id}/password-provisional` |
 
 ## 7. Endpoint adicional fuera del contrato
 
 | # | Estado | Método | Endpoint |
 |---:|---|---|---|
-| 70 | Adicional; pendiente de incorporar al contrato | POST | `/api/auth/refresh` |
+| 71 | Adicional; pendiente de incorporar al contrato | POST | `/api/auth/refresh` |
 
 Su comportamiento, autenticación, parámetros y respuestas están pendientes de definición y aprobación antes de implementarlo.
 
@@ -191,6 +192,6 @@ Su comportamiento, autenticación, parámetros y respuestas están pendientes de
 
 | Concepto | Cantidad |
 |---|---:|
-| Endpoints documentados | 69 |
+| Endpoints documentados | 70 |
 | Endpoint adicional identificado | 1 |
-| Total del listado | 70 |
+| Total del listado | 71 |

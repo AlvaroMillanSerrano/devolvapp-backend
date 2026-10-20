@@ -12,7 +12,7 @@
 - Errores: `{ status, code, message, fieldErrors }` (ver `src/api/ApiError.js`).
 - Los endpoints de un rol **nunca** reciben el id del usuario: el backend lo obtiene del token.
 
-Total: **69 endpoints**.
+Total: **70 endpoints**.
 
 ## `authService.js` — rol: Público (salvo `me`/`logout`: autenticado)
 
@@ -108,6 +108,7 @@ Total: **69 endpoints**.
 | `GET` | `/api/admin/usuarios?q=&rol=&page=&size=` | HU-07.02 | `getUsuarios` | <br><sub>Page<{ id, nombre, email, roles: ['CIUDADANO'\|'RECOLECTOR'\|'ADMIN'], estado: ACTIVA\|SUSPENDIDA }></sub> |
 | `GET` | `/api/admin/usuarios/{id}` | HU-07.02 | `getUsuario` | añade { nombrePila, apellidos, dni, telefono, direccion, zona, altaEn, pedidos, zonaPreferida, zonasAsignadas, co2EvitadoKg } |
 | `PUT` | `/api/admin/usuarios/{id}` | HU-07.02 | `editarUsuario` | body: { nombre, apellidos, email, telefono, direccion? } (mantener actualizada la información) |
+| `PUT` | `/api/admin/usuarios/{id}/roles` | HU-01.03 | `actualizarRoles` | body: { roles: ['CIUDADANO'\|'RECOLECTOR'\|'ADMIN'] } · reemplaza todos los roles; 409 ULTIMO_ADMIN o NO_PERMITIDO si intenta retirar su propio rol ADMIN |
 | `POST` | `/api/admin/usuarios/{id}/suspender` | HU-07.02 | `suspenderUsuario` | la cuenta no podrá iniciar sesión (403 ACCOUNT_SUSPENDED) |
 | `POST` | `/api/admin/usuarios/{id}/reactivar` | HU-07.02 | `reactivarUsuario` |  |
 | `POST` | `/api/admin/recolectores` | HU-07.02 | `crearRecolector` | body: { nombre, apellidos, email, telefono, dni }<br><sub>201 → usuario + { passwordProvisional } (solo en esta respuesta). Al entrar deberá crear su contraseña y elegir zona</sub> |
