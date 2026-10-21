@@ -22,7 +22,7 @@ public class AuthController {
     }
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@AuthenticationPrincipal AuthUser user,
-                                       @Valid @RequestBody RefreshRequest request) {
+            @Valid @RequestBody RefreshRequest request) {
         authService.logout(user.id(), request.refreshToken());
         return ResponseEntity.noContent().build();
     }
