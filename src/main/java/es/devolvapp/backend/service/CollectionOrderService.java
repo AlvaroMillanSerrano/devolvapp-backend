@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.EnumMap;
 import java.util.List;
@@ -66,6 +67,10 @@ public class CollectionOrderService {
             if (request.fecha().getDayOfWeek().getValue() != slot.dayOfWeek()) {
                 throw ApiException.fieldError("VALIDATION_ERROR", "La fecha no corresponde a la franja seleccionada",
                         "fecha", "La fecha no corresponde al día de la semana de la franja seleccionada");
+            }
+            if (!CollectionTimeRules.hasNotEnded(request.fecha(), slot.endTime(), LocalDateTime.now())) {
+                throw ApiException.fieldError("VALIDATION_ERROR", "La franja horaria ya ha finalizado",
+                        "fecha", "Elige una franja cuya hora de fin aún no haya pasado");
             }
             if (address.zoneId() == null || !address.zoneId().equals(slot.zoneId())) {
                 throw ApiException.unprocessable("ZONA_SIN_SERVICIO",

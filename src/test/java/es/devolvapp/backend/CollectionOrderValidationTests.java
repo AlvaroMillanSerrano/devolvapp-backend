@@ -18,12 +18,25 @@ class CollectionOrderValidationTests {
     private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
 
     @Test
-    void acceptsOrderWithoutSchedulingDetails() {
+    void rejectsOrderWithoutSchedulingDetails() {
         var request = new CreateCollectionRequest(null, null, List.of(
                 new CreateBagRequest(Map.of(ContainerType.PET, 2, ContainerType.BRIK, 1))
         ));
 
-        assertThat(validator.validate(request)).isEmpty();
+        assertThat(validator.validate(request))
+                .extracting(violation -> violation.getPropertyPath().toString())
+                .contains("franjaId", "fecha");
+    }
+
+    @Test
+    void rejectsPastCollectionDate() {
+        var request = new CreateCollectionRequest(3L, LocalDate.now().minusDays(1), List.of(
+                new CreateBagRequest(Map.of(ContainerType.PET, 2))
+        ));
+
+        assertThat(validator.validate(request))
+                .extracting(violation -> violation.getPropertyPath().toString())
+                .contains("fecha");
     }
 
     @Test
