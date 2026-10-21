@@ -107,7 +107,14 @@ public class CiudadanoService {
                 """, (rs, row) -> rs.getString(1), citizenId);
 
         String email = emails.isEmpty() ? null : emails.getFirst();
-        producer.send("Pedido " + orderId + " eliminado. Email: " + email);
+
+        List<String> codes = jdbc.query("""
+                SELECT code FROM collection WHERE id=? AND citizen_id=?
+                """, (rs, row) -> rs.getString(1), orderId, citizenId);
+
+        String code = codes.isEmpty() ? String.valueOf(orderId) : codes.getFirst();
+
+        producer.send("Pedido " + code + " eliminado. Email: " + email);
         return getOrder(citizenId, orderId);
     }
 
