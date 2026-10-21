@@ -24,6 +24,7 @@ public class CollectionOrderController {
     @PostMapping
     public ResponseEntity<CollectionOrderResponse> create(@AuthenticationPrincipal AuthUser user,
                                                           @Valid @RequestBody CreateCollectionRequest request) {
+
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(collectionOrderService.create(request, user.id()));
     }

@@ -3,6 +3,7 @@ package es.devolvapp.backend.service;
 import es.devolvapp.backend.dto.ciudadano.RetiradaRequest;
 import es.devolvapp.backend.exception.ApiException;
 import es.devolvapp.backend.dto.common.PageResponse;
+import es.devolvapp.backend.messaging.MessageProducer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ public class CiudadanoService {
     private final WalletService walletService;
     private final ImpactService impactService;
     private final CodeGenerator codeGenerator;
+    private final MessageProducer producer;
 
     public PageResponse<Map<String, Object>> listOrders(Long citizenId, String state, int page, int size) {
         int safePage = Math.max(0, page);
@@ -100,6 +102,19 @@ public class CiudadanoService {
                 UPDATE collection SET status='CANCELADA', cancelled_at=now(), cancelled_by=?
                 WHERE id=? AND citizen_id=?
                 """, citizenId, orderId, citizenId);
+        List<String> emails = jdbc.query("""
+                SELECT email FROM d_user WHERE id=?
+                """, (rs, row) -> rs.getString(1), citizenId);
+
+        String email = emails.isEmpty() ? null : emails.getFirst();
+
+        List<String> codes = jdbc.query("""
+                SELECT code FROM collection WHERE id=? AND citizen_id=?
+                """, (rs, row) -> rs.getString(1), orderId, citizenId);
+
+        String code = codes.isEmpty() ? String.valueOf(orderId) : codes.getFirst();
+
+        producer.send("Pedido " + code + " eliminado. Email: " + email);
         return getOrder(citizenId, orderId);
     }
 

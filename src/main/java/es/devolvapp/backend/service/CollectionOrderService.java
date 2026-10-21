@@ -12,6 +12,7 @@ import es.devolvapp.backend.entity.ContainerType;
 import es.devolvapp.backend.entity.Role;
 import es.devolvapp.backend.entity.User;
 import es.devolvapp.backend.exception.ApiException;
+import es.devolvapp.backend.messaging.MessageProducer;
 import es.devolvapp.backend.repository.CollectionOrderRepository;
 import es.devolvapp.backend.repository.ContainerCatalogRepository;
 import es.devolvapp.backend.repository.UserRepository;
@@ -37,6 +38,7 @@ public class CollectionOrderService {
     private final UserRepository userRepository;
     private final JdbcTemplate jdbcTemplate;
     private final CodeGenerator codeGenerator;
+    private final MessageProducer producer;
 
     @Transactional
     public CollectionOrderResponse create(CreateCollectionRequest request, Long citizenId) {
@@ -103,6 +105,7 @@ public class CollectionOrderService {
         }
 
         CollectionOrder saved = collectionOrderRepository.save(collection);
+        producer.send("Pedido " + saved.getCode() + " creado. Email: " + citizen.getEmail());
         List<BagResponse> bagResponses = saved.getBags().stream()
                 .map(this::toBagResponse)
                 .toList();
