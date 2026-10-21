@@ -31,7 +31,7 @@ public class AuthController {
         return authService.currentUser(user.id());
     }
     @PostMapping("/registro")
-    public ResponseEntity<UsuarioResponse> register(@Valid @RequestBody RegistroRequest request) {
+public ResponseEntity<UsuarioResponse> register(@Valid @RequestBody RegistroRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request));
     }
     @PostMapping("/password/recuperar")
