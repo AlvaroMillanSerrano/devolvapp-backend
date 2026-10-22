@@ -15,31 +15,17 @@ class CollectionOrderHttpIntegrationTests extends PostgresIntegrationTest {
     private static final String IBAN = "ES9121000418450200051332";
 
     @Test
-    void createsMixedBagOrderWithoutZoneCollectorOrSchedule() throws Exception {
+    void rejectsOrderWithoutSchedulingDetails() throws Exception {
         Actors actors = createActors();
         String citizen = token(actors.citizenId(), actors.citizenEmail(), Role.CIUDADANO);
-        jdbc.update("UPDATE zip_code SET zone_id=NULL WHERE code=?", actors.zip());
 
         HttpResponse<String> response = send("POST", "/api/ciudadano/pedidos", citizen,
                 "{\"bolsas\":[{\"contenidos\":{\"PET\":2,\"BRIK\":1}},"
                         + "{\"contenidos\":{\"VIDRIO\":3}}]}");
 
-        assertThat(response.statusCode()).withFailMessage(response.body()).isEqualTo(HttpStatus.CREATED.value());
-        assertThat(response.body()).contains("\"numBolsas\":2", "\"totalEnvases\":6",
-                "\"PET\":2", "\"BRIK\":1", "\"VIDRIO\":3");
-        Long collectionId = jdbc.queryForObject("SELECT id FROM collection WHERE citizen_id=?", Long.class, actors.citizenId());
-        var saved = jdbc.queryForMap("""
-                SELECT zone_id,collector_id,time_slot_id,collection_date,start_time,end_time
-                FROM collection WHERE id=?
-                """, collectionId);
-        assertThat(saved.get("zone_id")).isNull();
-        assertThat(saved.get("collector_id")).isNull();
-        assertThat(saved.get("time_slot_id")).isNull();
-        assertThat(saved.get("collection_date")).isNull();
-        assertThat(saved.get("start_time")).isNull();
-        assertThat(saved.get("end_time")).isNull();
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM bag WHERE collection_id=?", Integer.class, collectionId)).isEqualTo(2);
-        assertThat(jdbc.queryForObject("SELECT SUM(quantity) FROM bag WHERE collection_id=?", Integer.class, collectionId)).isEqualTo(6);
+        assertThat(response.statusCode()).withFailMessage(response.body()).isEqualTo(HttpStatus.BAD_REQUEST.value());
+        assertThat(response.body()).contains("VALIDATION_ERROR", "fecha", "franjaId");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM collection", Integer.class)).isZero();
     }
 
     @Test
@@ -106,12 +92,16 @@ class CollectionOrderHttpIntegrationTests extends PostgresIntegrationTest {
         String collector = token(actors.collectorId(), actors.collectorEmail(), Role.RECOLECTOR);
         String admin = token(actors.adminId(), actors.adminEmail(), Role.ADMIN);
         Long collectionId = createOrder(actors, citizen, 5);
+        jdbc.update("UPDATE collection SET collection_date=? WHERE id=?", LocalDate.now(), collectionId);
         Long bagId = jdbc.queryForObject("SELECT id FROM bag WHERE collection_id=?", Long.class, collectionId);
 
         assertThat(send("POST", "/api/recolector/recogidas/" + collectionId + "/iniciar", collector, "{}").statusCode()).isEqualTo(200);
         HttpResponse<String> verification = send("PUT", "/api/recolector/recogidas/" + collectionId + "/bolsas/" + bagId,
                 collector, "{\"resultado\":\"DISCREPANCIA\",\"envasesValidos\":4,\"nota\":\"Envase dañado\"}");
         assertThat(verification.statusCode()).isEqualTo(200);
+        HttpResponse<String> collectorDetail = send("GET", "/api/recolector/recogidas/" + collectionId, collector, null);
+        assertThat(collectorDetail.statusCode()).isEqualTo(200).withFailMessage(collectorDetail.body());
+        assertThat(collectorDetail.body()).contains("\"bolsas\":[", "\"incidencias\":[");
         assertThat(send("POST", "/api/recolector/recogidas/" + collectionId + "/completar", collector, "{}").statusCode()).isEqualTo(200);
 
         var settlement = jdbc.queryForMap("SELECT valid_containers,total_amount,citizen_share,company_share FROM settlement WHERE collection_id=?", collectionId);
@@ -150,6 +140,9 @@ class CollectionOrderHttpIntegrationTests extends PostgresIntegrationTest {
         HttpResponse<String> incidence = send("GET", "/api/admin/incidencias?estado=ABIERTA", admin, null);
         assertThat(incidence.statusCode()).isEqualTo(200);
         Long incidentId = numberField(incidence.body(), "id");
+        HttpResponse<String> incidentDetail = send("GET", "/api/admin/incidencias/" + incidentId, admin, null);
+        assertThat(incidentDetail.statusCode()).isEqualTo(200).withFailMessage(incidentDetail.body());
+        assertThat(incidentDetail.body()).contains("\"recogida\":{", "\"bolsas\":[", "\"historial\":[");
         HttpResponse<String> resolved = send("PATCH", "/api/admin/incidencias/" + incidentId, admin,
                 "{\"estado\":\"RESUELTA\",\"resolucion\":\"Incidencia revisada\"}");
         assertThat(resolved.statusCode()).isEqualTo(200).withFailMessage(resolved.body());
@@ -163,6 +156,7 @@ class CollectionOrderHttpIntegrationTests extends PostgresIntegrationTest {
         String citizen = token(actors.citizenId(), actors.citizenEmail(), Role.CIUDADANO);
         String collector = token(actors.collectorId(), actors.collectorEmail(), Role.RECOLECTOR);
         Long collectionId = createOrder(actors, citizen, 2);
+        jdbc.update("UPDATE collection SET collection_date=? WHERE id=?", LocalDate.now(), collectionId);
         assertThat(send("POST", "/api/recolector/recogidas/" + collectionId + "/iniciar", collector, "{}").statusCode()).isEqualTo(200);
 
         HttpResponse<String> complete = send("POST", "/api/recolector/recogidas/" + collectionId + "/completar", collector, "{}");
@@ -171,6 +165,34 @@ class CollectionOrderHttpIntegrationTests extends PostgresIntegrationTest {
         assertThat(complete.body()).contains("BOLSAS_SIN_VERIFICAR");
         assertThat(jdbc.queryForObject("SELECT status FROM collection WHERE id=?", String.class, collectionId)).isEqualTo("EN_CAMINO");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM settlement WHERE collection_id=?", Integer.class, collectionId)).isZero();
+    }
+
+    @Test
+    void collectorCanStartOnlyOnScheduledDate() throws Exception {
+        Actors actors = createActors();
+        String citizen = token(actors.citizenId(), actors.citizenEmail(), Role.CIUDADANO);
+        String collector = token(actors.collectorId(), actors.collectorEmail(), Role.RECOLECTOR);
+        Long collectionId = createOrder(actors, citizen, 2);
+
+        HttpResponse<String> future = send("POST", "/api/recolector/recogidas/" + collectionId + "/iniciar", collector, "{}");
+        assertThat(future.statusCode()).isEqualTo(HttpStatus.CONFLICT.value());
+        assertThat(future.body()).contains("NO_PERMITIDO");
+        assertThat(jdbc.queryForObject("SELECT status FROM collection WHERE id=?", String.class, collectionId))
+                .isEqualTo("PENDIENTE");
+
+        jdbc.update("UPDATE collection SET collection_date=? WHERE id=?", LocalDate.now().minusDays(1), collectionId);
+        HttpResponse<String> past = send("POST", "/api/recolector/recogidas/" + collectionId + "/iniciar", collector, "{}");
+        assertThat(past.statusCode()).isEqualTo(HttpStatus.CONFLICT.value());
+        assertThat(past.body()).contains("NO_PERMITIDO");
+
+        jdbc.update("UPDATE collection SET collection_date=NULL WHERE id=?", collectionId);
+        HttpResponse<String> unscheduled = send("POST", "/api/recolector/recogidas/" + collectionId + "/iniciar", collector, "{}");
+        assertThat(unscheduled.statusCode()).isEqualTo(HttpStatus.CONFLICT.value());
+        assertThat(unscheduled.body()).contains("NO_PERMITIDO");
+
+        jdbc.update("UPDATE collection SET collection_date=? WHERE id=?", LocalDate.now(), collectionId);
+        HttpResponse<String> today = send("POST", "/api/recolector/recogidas/" + collectionId + "/iniciar", collector, "{}");
+        assertThat(today.statusCode()).isEqualTo(HttpStatus.OK.value()).withFailMessage(today.body());
     }
 
     private static Long numberField(String json, String field) {

@@ -77,6 +77,11 @@ public class RecolectorService {
     @Transactional
     public Map<String, Object> start(Long collectorId, Long id) {
         Map<String, Object> collection = requireAssigned(collectorId, id, "PENDIENTE");
+        LocalDate collectionDate = (LocalDate) collection.get("fecha");
+        if (!CollectionTimeRules.canStartToday(collectionDate, LocalDate.now())) {
+            throw ApiException.conflict("NO_PERMITIDO",
+                    "Solo puedes iniciar una recogida en su fecha programada");
+        }
         jdbc.update("UPDATE collection SET status='EN_CAMINO',started_at=now() WHERE id=?", id);
         return detail(collectorId, id);
     }
@@ -308,8 +313,15 @@ public class RecolectorService {
 
     private Map<String, Object> requireAssigned(Long collectorId, Long id, String status) {
         List<Map<String, Object>> rows = jdbc.query("""
-                SELECT id,code,status FROM collection WHERE id=? AND collector_id=?
-                """, (rs, row) -> Map.of("id", rs.getLong(1), "codigo", rs.getString(2), "estado", rs.getString(3)),
+                SELECT id,code,status,collection_date FROM collection WHERE id=? AND collector_id=?
+                """, (rs, row) -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("id", rs.getLong("id"));
+                    item.put("codigo", rs.getString("code"));
+                    item.put("estado", rs.getString("status"));
+                    item.put("fecha", rs.getObject("collection_date", LocalDate.class));
+                    return item;
+                },
                 id, collectorId);
         if (rows.isEmpty()) throw ApiException.forbidden("La recogida no está asignada a este recolector");
         if (status != null && !status.equals(rows.getFirst().get("estado")))

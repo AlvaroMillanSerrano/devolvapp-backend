@@ -11,6 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -142,18 +144,21 @@ public class CiudadanoService {
         }
         Number zoneNumber = (Number) zoneId;
         Map<String, Object> zone = Map.of("id", zoneNumber.longValue(), "nombre", location.get("zoneName"));
-        LocalDate start = LocalDate.now();
+        LocalDateTime now = LocalDateTime.now();
+        LocalDate start = now.toLocalDate();
         List<Map<String, Object>> slots = jdbc.query("""
                 SELECT id, day_of_week, start_time, end_time, capacity
                 FROM time_slot WHERE zone_id=? AND active=true ORDER BY day_of_week,start_time
                 """, (rs, row) -> Map.of("id", rs.getLong("id"), "diaSemana", rs.getInt("day_of_week"),
-                        "horaInicio", rs.getObject("start_time"), "horaFin", rs.getObject("end_time"),
+                        "horaInicio", rs.getTime("start_time").toLocalTime(),
+                        "horaFin", rs.getTime("end_time").toLocalTime(),
                         "capacidad", rs.getInt("capacity")), zoneNumber.longValue());
         List<Map<String, Object>> windows = new ArrayList<>();
         for (int day = 0; day < 14; day++) {
             LocalDate date = start.plusDays(day);
             for (Map<String, Object> slot : slots) {
                 if (date.getDayOfWeek().getValue() != (Integer) slot.get("diaSemana")) continue;
+                if (!CollectionTimeRules.hasNotEnded(date, (LocalTime) slot.get("horaFin"), now)) continue;
                 Long slotId = (Long) slot.get("id");
                 Integer capacity = (Integer) slot.get("capacidad");
                 Long occupied = jdbc.queryForObject("""
