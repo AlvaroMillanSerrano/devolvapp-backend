@@ -6,6 +6,7 @@ import es.devolvapp.backend.dto.common.DireccionDto;
 import es.devolvapp.backend.dto.common.UsuarioResponse;
 import es.devolvapp.backend.entity.User;
 import es.devolvapp.backend.exception.ApiException;
+import es.devolvapp.backend.messaging.MessageProducer;
 import es.devolvapp.backend.repository.UserRepository;
 import es.devolvapp.backend.security.AuthUser;
 import es.devolvapp.backend.security.JwtService;
@@ -37,6 +38,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final LoginAttemptService loginAttempts;
     private final MailService mailService;
+    private final MessageProducer producer;
 
     @Value("$" + "{app.jwt.refresh-ttl-days:30}")
     private long refreshTtlDays;
@@ -97,6 +99,7 @@ public class AuthService {
                             (SELECT lng FROM zip_code WHERE code = ?))
                     """, id, address.tipoVia(), address.nombreVia(), address.numero(), address.piso(),
                     address.letra(), postalCode, address.ciudad(), postalCode, postalCode);
+            producer.send(request.email(),"registered", "");
             return userResponse(id);
         } catch (DuplicateKeyException exception) {
             throw ApiException.conflict("DUPLICATE_EMAIL", "Ya existe una cuenta con esos datos");

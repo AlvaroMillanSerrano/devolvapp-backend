@@ -110,7 +110,7 @@ public class CollectionOrderService {
         }
 
         CollectionOrder saved = collectionOrderRepository.save(collection);
-        producer.send("Pedido " + saved.getCode() + " creado. Email: " + citizen.getEmail());
+        producer.send(citizen.getEmail(), "created", saved.getCode());
         List<BagResponse> bagResponses = saved.getBags().stream()
                 .map(this::toBagResponse)
                 .toList();
