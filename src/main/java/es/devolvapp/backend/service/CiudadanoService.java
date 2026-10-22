@@ -116,7 +116,7 @@ public class CiudadanoService {
 
         String code = codes.isEmpty() ? String.valueOf(orderId) : codes.getFirst();
 
-        producer.send("Pedido " + code + " eliminado. Email: " + email);
+        producer.send(email,"canceled", code);
         return getOrder(citizenId, orderId);
     }
 

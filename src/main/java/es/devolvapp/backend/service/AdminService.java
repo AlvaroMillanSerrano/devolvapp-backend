@@ -30,7 +30,6 @@ public class AdminService {
     private final JdbcTemplate jdbc;
     private final CiudadanoService citizenService;
     private final CodeGenerator codes;
-    private final WalletService walletService;
     private final ImpactService impactService;
     private final PasswordEncoder passwordEncoder;
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -153,7 +152,7 @@ public class AdminService {
     public Map<String,Object> updateIncident(Long id, Long adminId, ActualizarIncidenciaRequest request) {
         List<Map<String,Object>> rows=jdbc.query("SELECT status,resolution FROM incident WHERE id=? FOR UPDATE",
                 (rs,row)->Map.of("status",rs.getString(1),"resolution",rs.getString(2)==null?"":rs.getString(2)),id);
-        if(rows.isEmpty())throw ApiException.notFound("Incidencia no encontrada");
+        if(rows.isEmpty())throw ApiException.notFound("Incidencia no econtrada");
         String state=request.estado()==null?(String)rows.getFirst().get("status"):request.estado();
         String resolution=request.resolucion()==null?(String)rows.getFirst().get("resolution"):request.resolucion();
         if("RESUELTA".equals(state)&&(resolution==null||resolution.isBlank()))

@@ -18,8 +18,8 @@ public class MessageProducer {
         this.rabbitTemplate = rabbitTemplate;
     }
 
-    public DevolvMessage send(String content) {
-        DevolvMessage message = new DevolvMessage(content, Instant.now());
+    public DevolvMessage send(String email, String type,String content) {
+        DevolvMessage message = new DevolvMessage(email, type, content, Instant.now());
         rabbitTemplate.convertAndSend(RabbitConfig.EXCHANGE, RabbitConfig.ROUTING_KEY, message);
         log.info("Mensaje enviado: {}", message);
         return message;

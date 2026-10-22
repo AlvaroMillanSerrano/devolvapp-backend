@@ -6,6 +6,7 @@ import es.devolvapp.backend.dto.recolector.ResultadoBolsaRequest;
 import es.devolvapp.backend.dto.recolector.SolicitudZonaRequest;
 import es.devolvapp.backend.entity.Role;
 import es.devolvapp.backend.exception.ApiException;
+import es.devolvapp.backend.messaging.MessageProducer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,7 @@ public class RecolectorService {
     private final CodeGenerator codes;
     private final ImpactService impactService;
     private final ParameterService parameters;
+    private final MessageProducer producer;
 
     public Map<String, Object> assigned(Long collectorId) {
         List<Map<String, Object>> assignments = jdbc.query("""
@@ -165,6 +167,21 @@ public class RecolectorService {
     public Map<String, Object> reportIncident(Long collectorId, Long collectionId, IncidenciaRequest request) {
         requireAssigned(collectorId, collectionId, null);
         Long incidentId = createIncident(collectionId, null, request.tipo(), request.descripcion(), collectorId);
+        List<String> admins = jdbc.queryForList(
+                "SELECT u.email FROM d_user u " +
+                        "JOIN user_role ur ON ur.user_id = u.id " +
+                        "WHERE ur.role = 'ADMIN'",
+                String.class
+        );
+        String code = jdbc.queryForObject(
+                "SELECT code FROM collection " +
+                        "WHERE id = " + collectionId,
+                String.class
+        );
+
+        for (String email : admins) {
+            producer.send(email, "incident", code);
+        }
         return jdbc.queryForObject("SELECT id,code,created_at FROM incident WHERE id=?", (rs, row) ->
                 Map.of("id", rs.getLong("id"), "codigo", rs.getString("code"), "creadaEn", rs.getObject("created_at")),
                 incidentId);

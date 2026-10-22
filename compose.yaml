@@ -50,11 +50,18 @@ services:
     image: mailhog/mailhog:latest
     container_name: mailhog
     restart: unless-stopped
+    user: "0"
     ports:
       - "1025:1025"
       - "8025:8025"
+    environment:
+      - MH_STORAGE=maildir
+      - MH_MAILDIR_PATH=/maildir
+    volumes:
+      - mailhog_data:/maildir
 
 volumes:
   postgres_data:
   redis_data:
   rabbitmq_data:
+  mailhog_data:
